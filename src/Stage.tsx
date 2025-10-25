@@ -26,7 +26,7 @@ type MessageStateType = {
     currentPhase: number;
     discoveries: Discovery[];
     journalEntries: JournalEntry[];
-    messagesInCurrentPhase: number; // Counter for messages since phase started - must reach 5 before keyword evaluation begins
+    messagesInCurrentPhase: number; // Counter for USER messages since phase started - must reach 3 before keyword evaluation begins (bot messages don't count)
 };
 
 type ConfigType = {debugMode?: boolean};
@@ -40,7 +40,7 @@ const PHASES: PhaseConfig[] = [
         description: "Meeting at the inn to discuss the mission",
         objectives: ["Meet at the inn", "Discuss the mission", "Plan the route", "Rest for the night"],
         keywords: ["first light", "dawn", "morning", "good night", "rest for"],
-        stageDirections: "{{char}} is meeting {{user}} at an inn on the edge of {{char}}'s territory. They need to discuss a mission to retrieve a powerful magical artifact from an ancient temple in a neighboring court. {{char}} should guide the conversation toward planning their travel route (air, forest, or road) and discussing potential complications from rivals who may also be seeking the artifact. The phase should end with {{char}} suggesting they rest for the night and leave at first light. {{char}} does not yet know what they will find at the temple. PACING: Take time with this scene - don't rush through all the planning in one message. Focus on one or two topics at a time (e.g., first discuss the mission itself, then in subsequent messages discuss the route options, then potential dangers). Let the conversation unfold naturally over multiple exchanges."
+        stageDirections: "{{char}} is meeting {{user}} at an inn on the edge of {{char}}'s territory. They need to discuss a mission to retrieve a powerful magical artifact from an ancient temple in a neighboring court. {{char}} should guide the conversation toward planning their travel route (air, forest, or road) and discussing potential complications from rivals who may also be seeking the artifact. {{char}} does not know what the Dread Trove artifact is. The phase should end with {{char}} suggesting they rest for the night and leave at first light. {{char}} does not yet know what they will find at the temple. PACING: Take time with this scene - don't rush through all the planning in one message. Focus on one or two topics at a time (e.g., first discuss the mission itself, then in subsequent messages discuss the route options, then potential dangers). Let the conversation unfold naturally over multiple exchanges."
     },
     {
         id: 2,
@@ -178,16 +178,19 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     }
 
     /**
-     * ⚡ PHASE TRANSITION LOGIC WITH 5-MESSAGE WAITING PERIOD ⚡
+     * ⚡ PHASE TRANSITION LOGIC WITH 3-MESSAGE WAITING PERIOD ⚡
      *
-     * When a new phase starts, this function enforces a 5-message waiting period
+     * When a new phase starts, this function enforces a 3-message waiting period
      * before keyword evaluation begins. This ensures the phase has time to develop
      * before allowing progression.
      *
+     * IMPORTANT: Only USER messages count toward the 3-message requirement.
+     * Bot/character responses do NOT increment the counter.
+     *
      * Flow:
      * 1. Phase starts → messagesInCurrentPhase = 0
-     * 2. Messages 1-4 → Keywords are NOT evaluated (returns false immediately)
-     * 3. Message 5+ → Keywords ARE evaluated for phase transition
+     * 2. User messages 1-2 → Keywords are NOT evaluated (returns false immediately)
+     * 3. User message 3+ → Keywords ARE evaluated for phase transition
      * 4. Phase transition occurs → messagesInCurrentPhase resets to 0
      *
      * This function ONLY checks keywords for the CURRENT phase.
@@ -197,9 +200,10 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
         // Early exit: already at final phase, no transitions possible
         if (currentPhase >= PHASES.length) return false;
 
-        // ⚠️ CRITICAL: Enforce 5-message waiting period
-        // Keywords are NOT evaluated until at least 5 messages have occurred in this phase
-        if (messagesInPhase < 5) {
+        // ⚠️ CRITICAL: Enforce 3-message waiting period
+        // Keywords are NOT evaluated until at least 3 USER messages have occurred in this phase
+        // (Bot messages don't count toward this requirement)
+        if (messagesInPhase < 3) {
             return false; // Too early to check keywords - still in waiting period
         }
 
@@ -256,9 +260,11 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
             const currentState = this.currentMessageState || this.getDefaultMessageState();
             const currentPhase = currentState.currentPhase;
 
-            // Increment message counter for current phase
-            // This counter tracks how many messages have occurred since the phase started
-            const messagesInPhase = currentState.messagesInCurrentPhase + 1;
+            // Increment message counter ONLY for user messages (not bot messages)
+            // This ensures only user messages count toward the 5-message waiting period
+            const messagesInPhase = isUserMessage
+                ? currentState.messagesInCurrentPhase + 1
+                : currentState.messagesInCurrentPhase;
 
             const newDiscoveries = currentState.discoveries.length < 50
                 ? this.extractDiscoveries(content, currentPhase)
@@ -271,8 +277,8 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
             let newMessageCount = messagesInPhase;
 
             // Check for phase transition
-            // Note: checkPhaseTransition will return false if messagesInPhase < 5
-            // This enforces the 5-message waiting period before keyword evaluation begins
+            // Note: checkPhaseTransition will return false if messagesInPhase < 3
+            // This enforces the 3-user-message waiting period before keyword evaluation begins
             if (this.checkPhaseTransition(content, currentPhase, messagesInPhase)) {
                 const journalEntry = this.generateJournalEntry(currentPhase, allDiscoveries);
                 newJournalEntries = [...newJournalEntries, {
@@ -280,7 +286,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                     content: journalEntry
                 }];
                 nextPhase = currentPhase + 1;
-                // Reset counter to 0 when entering new phase - starts 5-message waiting period again
+                // Reset counter to 0 when entering new phase - starts 3-user-message waiting period again
                 newMessageCount = 0;
             }
 
@@ -376,25 +382,25 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                             </div>
                         </div>
 
-                        {/* Enhanced visual feedback for 5-message waiting period */}
+                        {/* Enhanced visual feedback for 3-message waiting period */}
                         <div style={{
                             marginTop: '12px',
                             fontSize: '12px',
                             color: '#85c1e9',
                             fontFamily: 'monospace',
                             padding: '10px',
-                            backgroundColor: (currentState.messagesInCurrentPhase ?? 0) < 5 ? '#3d2a0a' : '#0a2540',
+                            backgroundColor: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '#3d2a0a' : '#0a2540',
                             borderRadius: '4px',
-                            border: (currentState.messagesInCurrentPhase ?? 0) < 5 ? '2px solid #f39c12' : '2px solid #2ecc71'
+                            border: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '2px solid #f39c12' : '2px solid #2ecc71'
                         }}>
                             <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px'}}>
-                                <strong>📊 Messages in Phase:</strong>
+                                <strong>📊 User Messages in Phase:</strong>
                                 <span style={{
                                     fontSize: '16px',
                                     fontWeight: 'bold',
-                                    color: (currentState.messagesInCurrentPhase ?? 0) < 5 ? '#f39c12' : '#2ecc71'
+                                    color: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '#f39c12' : '#2ecc71'
                                 }}>
-                                    {currentState.messagesInCurrentPhase ?? 0}/5
+                                    {currentState.messagesInCurrentPhase ?? 0}/3
                                 </span>
                             </div>
 
@@ -408,19 +414,19 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                                 marginBottom: '8px'
                             }}>
                                 <div style={{
-                                    width: `${Math.min(((currentState.messagesInCurrentPhase ?? 0) / 5) * 100, 100)}%`,
+                                    width: `${Math.min(((currentState.messagesInCurrentPhase ?? 0) / 3) * 100, 100)}%`,
                                     height: '100%',
-                                    backgroundColor: (currentState.messagesInCurrentPhase ?? 0) < 5 ? '#f39c12' : '#2ecc71',
+                                    backgroundColor: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '#f39c12' : '#2ecc71',
                                     transition: 'width 0.3s ease'
                                 }} />
                             </div>
 
-                            {(currentState.messagesInCurrentPhase ?? 0) < 5 ? (
+                            {(currentState.messagesInCurrentPhase ?? 0) < 3 ? (
                                 <div style={{color: '#f39c12', fontSize: '11px'}}>
                                     <span style={{fontSize: '14px', marginRight: '4px'}}>⏳</span>
-                                    <strong>WAITING PERIOD:</strong> {5 - (currentState.messagesInCurrentPhase ?? 0)} more message{5 - (currentState.messagesInCurrentPhase ?? 0) === 1 ? '' : 's'} until keyword evaluation begins
+                                    <strong>WAITING PERIOD:</strong> {3 - (currentState.messagesInCurrentPhase ?? 0)} more user message{3 - (currentState.messagesInCurrentPhase ?? 0) === 1 ? '' : 's'} until keyword evaluation begins
                                     <div style={{marginTop: '4px', fontStyle: 'italic', opacity: 0.8}}>
-                                        (Phase needs time to develop before progression is allowed)
+                                        (Only user messages count - bot responses do not increment counter)
                                     </div>
                                 </div>
                             ) : (
