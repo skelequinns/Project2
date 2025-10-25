@@ -472,27 +472,75 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                     }}>
                         🔧 DEBUG: Phase Objectives
                     </h3>
-                    <ul style={{
-                        margin: 0,
-                        paddingLeft: '20px',
+                    <div style={{
                         fontSize: '13px',
                         color: '#aed6f1',
                         fontFamily: 'monospace'
                     }}>
-                        {currentPhase.objectives.map((objective: string, idx: number) => (
-                            <li key={idx} style={{marginBottom: '5px'}}>
-                                {objective}
-                            </li>
-                        ))}
-                    </ul>
+                        {PHASES.map((phase: PhaseConfig, phaseIdx: number) => {
+                            const isCurrentPhase = phase.id === currentState.currentPhase;
+                            const isCompletedPhase = phase.id < currentState.currentPhase;
+                            const isFuturePhase = phase.id > currentState.currentPhase;
+
+                            // Don't show future phases
+                            if (isFuturePhase) return null;
+
+                            return (
+                                <div key={phaseIdx} style={{
+                                    marginBottom: '15px',
+                                    padding: '10px',
+                                    backgroundColor: isCurrentPhase ? '#1a4971' : '#0a2540',
+                                    borderRadius: '6px',
+                                    border: isCurrentPhase ? '2px solid #5dade2' : '1px solid #16537e'
+                                }}>
+                                    <div style={{
+                                        fontWeight: 'bold',
+                                        marginBottom: '8px',
+                                        color: isCurrentPhase ? '#5dade2' : '#7f8c8d',
+                                        fontSize: '14px'
+                                    }}>
+                                        {isCurrentPhase && '▶ '}
+                                        {phase.name}
+                                        {isCompletedPhase && ' ✓'}
+                                    </div>
+                                    {phase.objectives.map((objective: string, objIdx: number) => (
+                                        <div key={objIdx} style={{
+                                            marginBottom: '4px',
+                                            paddingLeft: '10px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            opacity: isCompletedPhase ? 0.7 : 1
+                                        }}>
+                                            <span style={{
+                                                marginRight: '8px',
+                                                fontSize: '16px',
+                                                color: isCompletedPhase ? '#2ecc71' : isCurrentPhase ? '#f39c12' : '#7f8c8d'
+                                            }}>
+                                                {isCompletedPhase ? '✓' : isCurrentPhase ? '○' : ''}
+                                            </span>
+                                            <span style={{
+                                                color: isCompletedPhase ? '#a8dadc' : isCurrentPhase ? '#ecf0f1' : '#7f8c8d',
+                                                textDecoration: isCompletedPhase ? 'line-through' : 'none'
+                                            }}>
+                                                {objective}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
                     {currentPhase.keywords.length > 0 && (
                         <div style={{
                             marginTop: '12px',
                             fontSize: '12px',
                             color: '#85c1e9',
-                            fontFamily: 'monospace'
+                            fontFamily: 'monospace',
+                            padding: '8px',
+                            backgroundColor: '#0a2540',
+                            borderRadius: '4px'
                         }}>
-                            <strong>Keywords:</strong> {currentPhase.keywords.join(', ')}
+                            <strong>⚡ Transition Keywords:</strong> {currentPhase.keywords.join(', ')}
                         </div>
                     )}
                 </div>
