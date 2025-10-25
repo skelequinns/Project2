@@ -159,17 +159,23 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     private characterName: string;
     private userName: string;
     private cachedStageDirections: Map<number, string> = new Map();
+    private currentMessageState: MessageStateType;
+    private currentChatState: ChatStateType;
 
     constructor(data: InitialData<InitStateType, ChatStateType, MessageStateType, ConfigType>) {
         super(data);
 
-        const {characters, users} = data;
+        const {characters, users, messageState, chatState} = data;
 
         // Extract names
         const charKeys = Object.keys(characters);
         const userKeys = Object.keys(users);
         this.characterName = charKeys.length > 0 ? characters[charKeys[0]].name : "Character";
         this.userName = userKeys.length > 0 ? users[userKeys[0]].name : "User";
+
+        // Initialize internal state tracking
+        this.currentMessageState = messageState || this.getDefaultMessageState();
+        this.currentChatState = chatState || {furthestPhase: 1};
     }
 
     private getDefaultMessageState(): MessageStateType {
@@ -192,7 +198,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
 
     async setState(state: MessageStateType): Promise<void> {
         if (state) {
-            this.state.messageState = state;
+            this.currentMessageState = state;
         }
     }
 
@@ -282,7 +288,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
      * Process message and update state
      */
     private processMessage(content: string, isUserMessage: boolean): Partial<StageResponse<ChatStateType, MessageStateType>> {
-        const currentState = (this.state && this.state.messageState) || this.getDefaultMessageState();
+        const currentState = this.currentMessageState;
         const currentPhase = currentState.currentPhase;
 
         // Extract discoveries (limit to avoid bloat)
@@ -311,10 +317,13 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
             journalEntries: newJournalEntries
         };
 
-        const currentChatState = (this.state && this.state.chatState) || {furthestPhase: 1};
         const newChatState: ChatStateType = {
-            furthestPhase: Math.max(currentChatState.furthestPhase, nextPhase)
+            furthestPhase: Math.max(this.currentChatState.furthestPhase, nextPhase)
         };
+
+        // Update internal state
+        this.currentMessageState = newMessageState;
+        this.currentChatState = newChatState;
 
         return {
             stageDirections: isUserMessage ? this.getStageDirections(nextPhase) : null,
@@ -335,9 +344,9 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     }
 
     render(): ReactElement {
-        const currentState = (this.state && this.state.messageState) || this.getDefaultMessageState();
+        const currentState = this.currentMessageState;
         const currentPhase = PHASES[currentState.currentPhase - 1];
-        const chatState = (this.state && this.state.chatState) || {furthestPhase: 1};
+        const chatState = this.currentChatState;
         const recentDiscoveries = currentState.discoveries.slice(-10).reverse();
 
         return (
@@ -438,7 +447,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                         </p>
                     ) : (
                         <div style={{fontSize: '14px', lineHeight: '1.8'}}>
-                            {currentState.journalEntries.map((entry, idx) => (
+                            {currentState.journalEntries.map((entry: JournalEntry, idx: number) => (
                                 <div key={idx} style={{marginBottom: '10px', color: '#ccc'}}>
                                     {entry.content}
                                 </div>
@@ -470,7 +479,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                         color: '#aed6f1',
                         fontFamily: 'monospace'
                     }}>
-                        {currentPhase.objectives.map((objective, idx) => (
+                        {currentPhase.objectives.map((objective: string, idx: number) => (
                             <li key={idx} style={{marginBottom: '5px'}}>
                                 {objective}
                             </li>
@@ -509,7 +518,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                             color: '#aed6f1',
                             fontFamily: 'monospace'
                         }}>
-                            {recentDiscoveries.map((discovery, idx) => (
+                            {recentDiscoveries.map((discovery: Discovery, idx: number) => (
                                 <div key={idx} style={{
                                     marginBottom: '8px',
                                     padding: '5px',
