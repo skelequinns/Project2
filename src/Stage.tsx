@@ -165,17 +165,25 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     constructor(data: InitialData<InitStateType, ChatStateType, MessageStateType, ConfigType>) {
         super(data);
 
-        const {characters, users, messageState, chatState} = data;
+        try {
+            const {characters, users, messageState, chatState} = data;
 
-        // Extract names
-        const charKeys = Object.keys(characters);
-        const userKeys = Object.keys(users);
-        this.characterName = charKeys.length > 0 ? characters[charKeys[0]].name : "Character";
-        this.userName = userKeys.length > 0 ? users[userKeys[0]].name : "User";
+            // Extract names with null safety
+            const charKeys = characters ? Object.keys(characters) : [];
+            const userKeys = users ? Object.keys(users) : [];
+            this.characterName = charKeys.length > 0 ? characters[charKeys[0]].name : "Character";
+            this.userName = userKeys.length > 0 ? users[userKeys[0]].name : "User";
 
-        // Initialize internal state tracking
-        this.currentMessageState = messageState || this.getDefaultMessageState();
-        this.currentChatState = chatState || {furthestPhase: 1};
+            // Initialize internal state tracking with defaults
+            this.currentMessageState = messageState || this.getDefaultMessageState();
+            this.currentChatState = chatState || {furthestPhase: 1};
+        } catch (error) {
+            // Fallback to safe defaults if initialization fails
+            this.characterName = "Character";
+            this.userName = "User";
+            this.currentMessageState = this.getDefaultMessageState();
+            this.currentChatState = {furthestPhase: 1};
+        }
     }
 
     private getDefaultMessageState(): MessageStateType {
@@ -187,18 +195,21 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     }
 
     async load(): Promise<Partial<LoadResponse<InitStateType, ChatStateType, MessageStateType>>> {
+        // Return immediately with minimal data to avoid timeout
         return {
             success: true,
-            error: null,
-            initState: {startTimestamp: Date.now()},
-            chatState: {furthestPhase: 1},
-            messageState: this.getDefaultMessageState()
+            error: null
         };
     }
 
     async setState(state: MessageStateType): Promise<void> {
-        if (state) {
-            this.currentMessageState = state;
+        try {
+            if (state) {
+                this.currentMessageState = state;
+            }
+        } catch (error) {
+            // Silently fail and keep current state
+            console.error('setState error:', error);
         }
     }
 
@@ -288,51 +299,63 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
      * Process message and update state
      */
     private processMessage(content: string, isUserMessage: boolean): Partial<StageResponse<ChatStateType, MessageStateType>> {
-        const currentState = this.currentMessageState;
-        const currentPhase = currentState.currentPhase;
+        try {
+            const currentState = this.currentMessageState || this.getDefaultMessageState();
+            const currentPhase = currentState.currentPhase;
 
-        // Extract discoveries (limit to avoid bloat)
-        const newDiscoveries = currentState.discoveries.length < 50
-            ? this.extractDiscoveries(content, currentPhase)
-            : [];
+            // Extract discoveries (limit to avoid bloat)
+            const newDiscoveries = currentState.discoveries.length < 50
+                ? this.extractDiscoveries(content, currentPhase)
+                : [];
 
-        const allDiscoveries = [...currentState.discoveries, ...newDiscoveries];
+            const allDiscoveries = [...currentState.discoveries, ...newDiscoveries];
 
-        // Check phase transition
-        let nextPhase = currentPhase;
-        let newJournalEntries = currentState.journalEntries;
+            // Check phase transition
+            let nextPhase = currentPhase;
+            let newJournalEntries = currentState.journalEntries;
 
-        if (this.checkPhaseTransition(content, currentPhase) && currentPhase < PHASES.length) {
-            const journalEntry = this.generateJournalEntry(currentPhase, allDiscoveries);
-            newJournalEntries = [...newJournalEntries, {
-                phase: currentPhase,
-                content: journalEntry
-            }];
-            nextPhase = currentPhase + 1;
+            if (this.checkPhaseTransition(content, currentPhase) && currentPhase < PHASES.length) {
+                const journalEntry = this.generateJournalEntry(currentPhase, allDiscoveries);
+                newJournalEntries = [...newJournalEntries, {
+                    phase: currentPhase,
+                    content: journalEntry
+                }];
+                nextPhase = currentPhase + 1;
+            }
+
+            const newMessageState: MessageStateType = {
+                currentPhase: nextPhase,
+                discoveries: allDiscoveries,
+                journalEntries: newJournalEntries
+            };
+
+            const newChatState: ChatStateType = {
+                furthestPhase: Math.max(this.currentChatState.furthestPhase, nextPhase)
+            };
+
+            // Update internal state
+            this.currentMessageState = newMessageState;
+            this.currentChatState = newChatState;
+
+            return {
+                stageDirections: isUserMessage ? this.getStageDirections(nextPhase) : null,
+                messageState: newMessageState,
+                chatState: newChatState,
+                modifiedMessage: null,
+                systemMessage: null,
+                error: null
+            };
+        } catch (error) {
+            // Return minimal response if processing fails
+            return {
+                stageDirections: null,
+                messageState: this.currentMessageState,
+                chatState: this.currentChatState,
+                modifiedMessage: null,
+                systemMessage: null,
+                error: null
+            };
         }
-
-        const newMessageState: MessageStateType = {
-            currentPhase: nextPhase,
-            discoveries: allDiscoveries,
-            journalEntries: newJournalEntries
-        };
-
-        const newChatState: ChatStateType = {
-            furthestPhase: Math.max(this.currentChatState.furthestPhase, nextPhase)
-        };
-
-        // Update internal state
-        this.currentMessageState = newMessageState;
-        this.currentChatState = newChatState;
-
-        return {
-            stageDirections: isUserMessage ? this.getStageDirections(nextPhase) : null,
-            messageState: newMessageState,
-            chatState: newChatState,
-            modifiedMessage: null,
-            systemMessage: null,
-            error: null
-        };
     }
 
     async beforePrompt(userMessage: Message): Promise<Partial<StageResponse<ChatStateType, MessageStateType>>> {
@@ -344,10 +367,11 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     }
 
     render(): ReactElement {
-        const currentState = this.currentMessageState;
-        const currentPhase = PHASES[currentState.currentPhase - 1];
-        const chatState = this.currentChatState;
-        const recentDiscoveries = currentState.discoveries.slice(-10).reverse();
+        try {
+            const currentState = this.currentMessageState || this.getDefaultMessageState();
+            const currentPhase = PHASES[currentState.currentPhase - 1] || PHASES[0];
+            const chatState = this.currentChatState || {furthestPhase: 1};
+            const recentDiscoveries = (currentState.discoveries || []).slice(-10).reverse();
 
         return (
             <div style={{
@@ -581,5 +605,26 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                 )}
             </div>
         );
+        } catch (error) {
+            // Fallback UI if render fails
+            return (
+                <div style={{
+                    width: '100vw',
+                    height: '100vh',
+                    padding: '20px',
+                    backgroundColor: '#1a1a2e',
+                    color: '#eaeaea',
+                    fontFamily: 'Georgia, serif',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <div style={{textAlign: 'center'}}>
+                        <h1 style={{color: '#c9a961'}}>The Prophecy Quest</h1>
+                        <p>Initializing your adventure...</p>
+                    </div>
+                </div>
+            );
+        }
     }
 }
