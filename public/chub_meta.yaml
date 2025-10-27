@@ -5,7 +5,7 @@
 project_name: "Prophecy Storyline"
 
 # A short tagline to show in search.
-tagline: "A progressive story that unfolds as objectives are met."
+tagline: "A chub extension that introduces a phased story which sends {{char}} and {{user}} into a temple searching for an ancient artifact."
 
 # 'PUBLIC', 'PRIVATE', or 'UNLISTED'.
 visibility: 'UNLISTED'
@@ -23,9 +23,9 @@ position: 'ADJACENT'
 # Self-explanatory.
 # tags:
 #  - 'Stage'
-#  - 'Admin'
-#  - 'Template'
-#  - 'Base'
+#  - 'Story'
+#  - 'RPG'
+#  - 'Romance'
 
 # The schema of any user-supplied config.
 # If your stage requires a configuration but has no
