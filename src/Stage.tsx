@@ -13,7 +13,7 @@ interface PhaseConfig {
     name: string;
     description: string;
     objectives: string[];
-    keywords: string[];
+    transitionKeywords: string[]; // EXPLICIT phrases that signal readiness to transition
     stageDirections: string;
 }
 
@@ -26,12 +26,17 @@ type MessageStateType = {
     currentPhase: number;
     discoveries: Discovery[];
     journalEntries: JournalEntry[];
-    messagesInCurrentPhase: number; // Counter for USER messages since phase started - must reach 3 before keyword evaluation begins (bot messages don't count)
+    messagesInCurrentPhase: number; // Counter for USER messages since phase started
 };
 
 type ConfigType = {debugMode?: boolean};
 type InitStateType = {startTimestamp: number};
 type ChatStateType = {furthestPhase: number};
+
+// ⚡ IMPROVED PHASE TRANSITION CONSTANTS ⚡
+const MIN_MESSAGES_BEFORE_EVALUATION = 6; // Increased from 3 to allow more development
+const COMFORTABLE_PHASE_LENGTH = 10; // Sweet spot for phase development
+const MAX_MESSAGES_BEFORE_FORCED_CHECK = 20; // Safety valve to prevent stalling
 
 const PHASES: PhaseConfig[] = [
     {
@@ -39,64 +44,78 @@ const PHASES: PhaseConfig[] = [
         name: "Phase 1: Planning",
         description: "Meeting at the inn to discuss the mission",
         objectives: ["Meet at the inn", "Discuss the mission", "Plan the route", "Rest for the night"],
-        keywords: ["first light", "dawn", "morning", "good night", "rest for"],
-        stageDirections: "{{char}} is meeting {{user}} at an inn on the edge of {{char}}'s territory. They need to discuss a mission to retrieve a powerful magical artifact from an ancient temple in a neighboring court. {{char}} should guide the conversation toward planning their travel route (air, forest, or road) and discussing potential complications from rivals who may also be seeking the artifact. {{char}} does not know what the Dread Trove artifact is. The phase should end with {{char}} suggesting they rest for the night and leave at first light. {{char}} does not yet know what they will find at the temple. PACING: Take time with this scene - don't rush through all the planning in one message. Focus on one or two topics at a time (e.g., first discuss the mission itself, then in subsequent messages discuss the route options, then potential dangers). Let the conversation unfold naturally over multiple exchanges."
+        transitionKeywords: [
+            "we should rest for the night",
+            "let's rest for the night",
+            "we'll leave at first light",
+            "let us depart at dawn",
+            "let's get some rest and leave at dawn"
+        ],
+        stageDirections: "{{char}} is meeting {{user}} at an inn on the edge of {{char}}'s territory. They need to discuss a mission to retrieve a powerful magical artifact from an ancient temple in a neighboring court. {{char}} should guide the conversation toward planning their travel route (air, forest, or road) and discussing potential complications from rivals who may also be seeking the artifact. {{char}} does not know what the Dread Trove artifact is. The phase should end ONLY when {{char}} explicitly suggests they rest for the night and leave at first light - use one of these exact phrases: 'We should rest for the night' or 'Let's get some rest and leave at dawn'. Do NOT use these phrases until you've thoroughly discussed the mission. {{char}} does not yet know what they will find at the temple."
     },
     {
         id: 2,
         name: "Phase 2: Travel to Temple",
         description: "Journey from the inn to the temple",
         objectives: ["Leave at dawn", "Choose travel route", "Overcome obstacles", "Arrive at temple"],
-        keywords: ["temple", "arrived", "reach", "entrance", "gates"],
-        stageDirections: "{{char}} and {{user}} are traveling to the ancient temple to retrieve the artifact. They left at dawn and must navigate challenges based on their chosen route: if traveling by air, they risk being spotted and attacked from below; through the forest, they must watch for dangerous beasts and monsters; by road, the journey takes longer and they risk being intercepted by rivals. {{char}} should introduce obstacles and friction that must be overcome during the journey. Guide the story toward their arrival at the temple. {{char}} still does not know what awaits them inside. PACING: This journey should take multiple messages to complete. Don't have them arrive at the temple immediately. First describe the beginning of the journey, then introduce one obstacle or challenge at a time in separate messages. Build tension gradually as they approach their destination."
+        transitionKeywords: [
+            "we've arrived at the temple",
+            "we've reached the temple",
+            "the temple stands before us",
+            "we stand before the temple",
+            "the temple entrance looms"
+        ],
+        stageDirections: "{{char}} and {{user}} are traveling to the ancient temple to retrieve the artifact. They left at dawn and must navigate challenges based on their chosen route: if traveling by air, they risk being spotted and attacked from below; through the forest, they must watch for dangerous beasts and monsters; by road, the journey takes longer and they risk being intercepted by rivals. {{char}} should introduce obstacles and friction that must be overcome during the journey. This phase ends ONLY when {{char}} explicitly describes arriving at the temple using one of these phrases: 'We've reached the temple' or 'The temple stands before us'. Do NOT arrive at the temple until you've navigated at least one significant obstacle. {{char}} still does not know what awaits them inside."
     },
     {
         id: 3,
         name: "Phase 3: Exploring the Temple",
         description: "Searching the temple's main floor",
         objectives: ["Enter temple", "Explore atrium", "Investigate chambers", "Find hidden staircase"],
-        keywords: ["hidden", "staircase", "stairs", "descend", "below", "beneath", "underground"],
-        stageDirections: "{{char}} and {{user}} are exploring a large, ancient temple. The architecture is labyrinthine with mysterious murals painted on the walls. A central atrium leads to approximately a dozen chambers on the main floor. As they search, they find that none of these chambers contain the artifact they seek, though they may discover other interesting magical items or encounter creatures that inhabit the temple. {{char}} should describe the temple's eerie atmosphere and guide the exploration. The artifact must be somewhere else - perhaps deeper within the temple. The phase advances when they discover a hidden staircase leading down beneath the main atrium. PACING: Explore the temple slowly over many messages. Don't find the hidden staircase immediately. First describe entering the temple and the main atrium, then explore individual chambers one or two at a time in separate messages. Build atmosphere and mystery. Save the discovery of the hidden staircase for after exploring several chambers."
+        transitionKeywords: [
+            "a hidden staircase",
+            "discovered a staircase",
+            "found stairs leading down",
+            "stairs descending into darkness",
+            "concealed stairway"
+        ],
+        stageDirections: "{{char}} and {{user}} are exploring a large, ancient temple. The architecture is labyrinthine with mysterious murals painted on the walls. A central atrium leads to approximately a dozen chambers on the main floor. As they search, they find that none of these chambers contain the artifact they seek, though they may discover other interesting magical items or encounter creatures that inhabit the temple. {{char}} should describe the temple's eerie atmosphere and guide the exploration. The artifact must be somewhere else - perhaps deeper within the temple. This phase ends ONLY when {{char}} explicitly describes discovering a hidden staircase using one of these phrases: 'We found a hidden staircase' or 'There are stairs descending into darkness'. Do NOT discover the staircase until after exploring several chambers thoroughly."
     },
     {
         id: 4,
         name: "Phase 4: The Hidden Chamber",
         description: "Descending into the depths of the temple",
         objectives: ["Descend staircase", "Enter cavern", "Study prophecy", "Approach artifact"],
-        keywords: ["artifact", "daggers", "pedestal", "approach"],
-        stageDirections: "{{char}} and {{user}} are descending a long, dark, damp spiral staircase. Water drips constantly from the walls. The descent seems endless. When they finally reach the bottom, they enter a massive underground cavern unlike anything above. The chamber is filled with stained glass windows that seem to glow with their own light, elaborate murals, and ancient statues. As {{char}} studies these images, they begin to realize these depictions tell a story - a prophecy. The images show two figures (who bear a striking resemblance to {{char}} and {{user}}) finding an artifact, falling in love, and standing together against a terrible threat. {{char}} should express shock, confusion, or disbelief at seeing this prophecy about themselves. The phase advances when they approach what appears to be the artifact on a pedestal in the center of the chamber. PACING: This is a major revelation - take your time. First focus on the long descent down the staircase (2-3 messages). Then describe entering the cavern and initial impressions. In subsequent messages, gradually have {{char}} realize what the murals depict. Let the weight of the prophecy sink in before approaching the artifact. This should unfold over at least 5-6 messages."
+        transitionKeywords: [
+            "approach the artifact",
+            "approaching the daggers",
+            "reach for the artifact",
+            "step toward the pedestal",
+            "move closer to the daggers"
+        ],
+        stageDirections: "{{char}} and {{user}} are descending a long, dark, damp spiral staircase. Water drips constantly from the walls. The descent seems endless. When they finally reach the bottom, they enter a massive underground cavern unlike anything above. The chamber is filled with stained glass windows that seem to glow with their own light, elaborate murals, and ancient statues. As {{char}} studies these images, they begin to realize these depictions tell a story - a prophecy. The prophecy speaks of two legendary daggers that must not be separated or terrible destruction will follow. At the center of this grand chamber sits a stone pedestal with an ornate artifact case. Inside: a SINGLE dagger. {{char}} realizes something is wrong - where is the second dagger? This phase ends ONLY when {{char}} explicitly moves to approach or examine the artifact, using phrases like: 'Let's approach the artifact' or 'I'm moving closer to examine it'. Do NOT approach until thoroughly examining the prophecy and discussing its implications."
     },
     {
         id: 5,
-        name: "Phase 5: The Artifact",
-        description: "Discovering the twin daggers",
-        objectives: ["Examine daggers", "Sense their power", "Take the daggers"],
-        keywords: ["take", "took", "grab", "claim", "both"],
-        stageDirections: "{{char}} and {{user}} approach the pedestal at the center of the chamber. What they find is unexpected - the artifact is not a single object, but a pair of daggers resting on the ancient stone. One blade appears to be forged from pure starlight itself, glowing softly and seeming to whisper directly to {{user}}. The other is carved from obsidian so dark it seems to absorb light, and it pulses with a presence that calls specifically to {{char}}. Both weapons have an otherworldly, almost alive quality that makes {{char}} hesitate. These are clearly objects of immense power - perhaps even dangerous power. {{char}} should express hesitation, awe, fear, or wonder at what they've found. The prophecy suggested they would find this together. Guide toward both {{char}} and {{user}} claiming their respective daggers. PACING: Don't rush to take the daggers immediately. First describe approaching the pedestal and seeing the daggers. Then focus on the strange sensations and calls from the weapons. Have {{char}} express their hesitation and discuss with {{user}} whether they should take them. Build the tension before they finally claim the daggers. This should take at least 3-4 messages."
+        name: "Phase 5: The Truth Revealed",
+        description: "Understanding the prophecy and the danger",
+        objectives: ["Examine artifact case", "Realize prophecy meaning", "Understand betrayal", "Make decision"],
+        transitionKeywords: [
+            "we need to train",
+            "we should prepare",
+            "let's begin our training",
+            "we must grow stronger",
+            "time to hone our skills"
+        ],
+        stageDirections: "{{char}} examines the artifact case more closely and finds an inscription that chills them to the bone. It's written in an ancient script that {{char}} can barely decipher: 'One blade remains. One blade was taken. The bearer of the stolen blade seeks the mate. United, they will end all courts. Separated, they are merely legendary weapons.' {{char}} realizes with horror that someone has already taken one of the daggers - and they're likely the rival who's been pursuing them. That rival now knows {{char}} has come for the second dagger. If {{char}} and {{user}} take this dagger, they will be hunted relentlessly. If they leave it, the rival may eventually find it anyway. {{char}} must decide: take the dagger and face the danger, or leave it and hope it remains hidden. Once decided, this phase ends ONLY when {{char}} explicitly suggests they need to prepare for what's coming, using phrases like: 'We need to train for what's ahead' or 'Let's begin preparing ourselves'. Do NOT suggest training until the decision about the dagger is made and its implications discussed."
     },
     {
         id: 6,
-        name: "Phase 6: The Escape",
-        description: "Fleeing the collapsing temple",
-        objectives: ["Escape collapsing temple", "Avoid hazards", "Return to Velaris"],
-        keywords: ["velaris", "returned", "safe", "escaped", "made it"],
-        stageDirections: "The moment the daggers are removed from their resting place, the entire temple begins to collapse! Ancient mechanisms have been triggered. {{char}} and {{user}} must flee immediately through crumbling passages and collapsing chambers. Stone falls from above, water floods through cracks in the walls, and the very ground shakes beneath their feet. They may encounter creatures and monsters that also inhabit the temple, now desperately trying to escape the destruction. {{char}} should create a sense of urgency and danger as they describe the environmental hazards. Guide the story toward {{char}} and {{user}} successfully escaping the temple and making their way back to Velaris ({{char}}'s home territory). PACING: This is an action sequence but should still take multiple messages. Don't have them escape immediately. Describe obstacles one at a time - falling debris in one message, a flooded passage in another, perhaps a creature encounter in a third. Build the tension and make the escape feel earned. The journey back to Velaris should be mentioned but can be quicker once they're clear of the temple."
-    },
-    {
-        id: 7,
-        name: "Phase 7: Accepting Their Fates",
-        description: "Facing the prophecy's implications",
-        objectives: ["Discuss prophecy", "Acknowledge threats", "Decide to train together"],
-        keywords: ["learn", "train", "master", "together", "practice"],
-        stageDirections: "{{char}} and {{user}} have returned safely to Velaris with the twin daggers. Now they must face what the prophecy in the temple revealed and what it means for their future. The daggers are incredibly powerful and dangerous - they can feel the raw magic thrumming through the weapons. Other court rulers will inevitably learn about the daggers and come seeking them, either to take them or to eliminate the threat. The weapons are both a blessing and a burden - symbols of power but also targets painted on their backs. {{char}} should discuss the weight of this responsibility, their feelings about the prophecy (especially the part about falling in love), the threats they now face, and what they should do next. Guide the conversation toward {{char}} and {{user}} deciding to learn how to properly wield and control the daggers together rather than hiding them away or trying to destroy them. PACING: This is a major emotional scene - don't rush it. Start with the immediate aftermath of returning (catching their breath, processing what happened). Then address different aspects of the prophecy one at a time across multiple messages - first the practical concerns about threats, then the emotional weight of destiny, then their feelings about each other. Let this conversation breathe and develop naturally over many exchanges."
-    },
-    {
-        id: 8,
-        name: "Phase 8: Moving Forward Together",
-        description: "Preparing for the coming storm",
-        objectives: ["Research daggers", "Train together", "Prepare for Hybern"],
-        keywords: [],
-        stageDirections: "{{char}} and {{user}} have committed to learning how to wield the ancient daggers together. They are now researching the weapons' origins and the legends surrounding them, searching for any information that might help them understand and control the immense power contained within. They train together, attempting to master the daggers while also preparing for the inevitable threats that will come. Somewhere across the sea, their greatest enemy - Hybern - will eventually learn of what they've found, and that danger looms on the horizon. {{char}} should describe their training sessions, any discoveries they make about the daggers' history or abilities, and the growing bond between them as they face this challenge together. This is an ongoing phase where their partnership and skills continue to develop. PACING: This is the long-term phase where the relationship develops. Focus on individual training sessions, research discoveries, or moments between {{char}} and {{user}} one at a time. Don't try to cover weeks of training in one message. Each response should show a specific moment, scene, or discovery. Let their partnership evolve gradually and naturally over many interactions."
+        name: "Phase 6: Training and Growth",
+        description: "Developing skills and partnership",
+        objectives: ["Establish training routine", "Develop new abilities", "Strengthen partnership", "Prepare for threats"],
+        transitionKeywords: [], // No transition - this is the final ongoing phase
+        stageDirections: "{{char}} and {{user}} are in an ongoing period of training, preparation, and development. They are building their skills, researching the prophecy, strengthening their partnership, and preparing for the inevitable confrontation with whoever holds the other dagger. This is an ongoing phase where their partnership and skills continue to develop. This is the final phase - there is no transition. Focus on specific moments: a particular training session, a research breakthrough, a quiet moment of connection, or preparing defenses. Each interaction should feel like a meaningful scene in their ongoing journey together."
     }
 ];
 
@@ -116,7 +135,6 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
             this.characterName = charKeys.length > 0 ? characters[charKeys[0]].name : "Character";
             this.userName = userKeys.length > 0 ? users[userKeys[0]].name : "User";
 
-            // Handle backward compatibility for messagesInCurrentPhase
             const defaultState = this.getDefaultMessageState();
             if (messageState) {
                 this.currentMessageState = {
@@ -147,7 +165,6 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
 
     async setState(state: MessageStateType): Promise<void> {
         if (state) {
-            // Ensure messagesInCurrentPhase exists for backward compatibility
             this.currentMessageState = {
                 ...state,
                 messagesInCurrentPhase: state.messagesInCurrentPhase ?? 0
@@ -178,44 +195,58 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
     }
 
     /**
-     * ⚡ PHASE TRANSITION LOGIC WITH 3-MESSAGE WAITING PERIOD ⚡
+     * ⚡ IMPROVED PHASE TRANSITION LOGIC ⚡
      *
-     * When a new phase starts, this function enforces a 3-message waiting period
-     * before keyword evaluation begins. This ensures the phase has time to develop
-     * before allowing progression.
+     * Changes from original:
+     * 1. Increased minimum messages from 3 to 6 for better phase development
+     * 2. Uses EXPLICIT transition keywords that the bot must intentionally say
+     * 3. Implements a maximum message cap as a safety valve
+     * 4. More natural progression - bot must deliberately signal readiness
      *
-     * IMPORTANT: Only USER messages count toward the 3-message requirement.
+     * IMPORTANT: Only USER messages count toward message thresholds.
      * Bot/character responses do NOT increment the counter.
      *
      * Flow:
      * 1. Phase starts → messagesInCurrentPhase = 0
-     * 2. User messages 1-2 → Keywords are NOT evaluated (returns false immediately)
-     * 3. User message 3+ → Keywords ARE evaluated for phase transition
-     * 4. Phase transition occurs → messagesInCurrentPhase resets to 0
-     *
-     * This function ONLY checks keywords for the CURRENT phase.
-     * It does NOT check keywords from any other phases.
+     * 2. User messages 1-5 → Keywords are NOT evaluated (returns false immediately)
+     * 3. User messages 6-19 → EXPLICIT transition keywords ARE evaluated
+     * 4. User message 20+ → Safety valve activates, allowing transition with looser criteria
+     * 5. Phase transition occurs → messagesInCurrentPhase resets to 0
      */
     private checkPhaseTransition(content: string, currentPhase: number, messagesInPhase: number): boolean {
         // Early exit: already at final phase, no transitions possible
         if (currentPhase >= PHASES.length) return false;
 
-        // ⚠️ CRITICAL: Enforce 3-message waiting period
-        // Keywords are NOT evaluated until at least 3 USER messages have occurred in this phase
-        // (Bot messages don't count toward this requirement)
-        if (messagesInPhase < 3) {
-            return false; // Too early to check keywords - still in waiting period
-        }
-
-        // Get ONLY the current phase configuration
         const currentPhaseConfig = PHASES[currentPhase - 1];
 
         // Safety check
-        if (!currentPhaseConfig || currentPhaseConfig.keywords.length === 0) return false;
+        if (!currentPhaseConfig) return false;
 
-        // Now that we have 5+ messages, check ONLY this phase's keywords (no other phases)
+        // Final phase has no transition keywords - it's ongoing
+        if (currentPhaseConfig.transitionKeywords.length === 0) return false;
+
+        // ⚠️ CRITICAL: Enforce minimum message waiting period
+        // This gives the phase time to breathe and develop naturally
+        if (messagesInPhase < MIN_MESSAGES_BEFORE_EVALUATION) {
+            return false; // Too early - still in development phase
+        }
+
         const lower = content.toLowerCase();
-        return currentPhaseConfig.keywords.some(keyword => lower.includes(keyword));
+
+        // NORMAL OPERATION (6-19 messages): Look for EXPLICIT transition keywords only
+        // These are deliberate phrases the bot must say to signal readiness to move on
+        if (messagesInPhase < MAX_MESSAGES_BEFORE_FORCED_CHECK) {
+            return currentPhaseConfig.transitionKeywords.some(keyword =>
+                lower.includes(keyword.toLowerCase())
+            );
+        }
+
+        // SAFETY VALVE (20+ messages): Phase has gone on very long
+        // Allow transition if any transition keyword appears
+        // This prevents phases from getting stuck indefinitely
+        return currentPhaseConfig.transitionKeywords.some(keyword =>
+            lower.includes(keyword.toLowerCase())
+        );
     }
 
     private generateJournalEntry(phase: number, discoveries: Discovery[]): string {
@@ -238,9 +269,17 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
         return `${phaseConfig.name}: ${parts.join(', ') || phaseConfig.description}`;
     }
 
+    /**
+     * ⚡ DYNAMIC PACING GUIDANCE ⚡
+     *
+     * This function adds real-time pacing instructions to stage directions
+     * based on how many messages have occurred in the current phase.
+     * This helps guide the bot's behavior throughout the phase lifecycle.
+     */
     private getStageDirections(phase: number): string {
         if (this.cachedStageDirections.has(phase)) {
-            return this.cachedStageDirections.get(phase)!;
+            // Clear cache if we've re-entered this phase (shouldn't happen often)
+            this.cachedStageDirections.delete(phase);
         }
 
         const phaseConfig = PHASES[phase - 1];
@@ -249,6 +288,23 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
         let directions = phaseConfig.stageDirections
             .replace(/\{\{char\}\}/g, this.characterName)
             .replace(/\{\{user\}\}/g, this.userName);
+
+        const msgCount = this.currentMessageState.messagesInCurrentPhase;
+
+        // Add dynamic pacing guidance based on current message count
+        if (msgCount < 3) {
+            directions += "\n\n🎯 PACING STAGE - Early Phase: This phase just started. Focus on just ONE topic or detail at a time. Take your time setting the scene. Do NOT rush or cover multiple topics in a single response. Build the atmosphere slowly.";
+        } else if (msgCount < 6) {
+            directions += "\n\n🎯 PACING STAGE - Building Phase: Still early in this phase. Continue developing the scene naturally. Focus on one or two elements per response. Do NOT jump ahead to conclusions or try to wrap things up. There's still plenty of time to explore.";
+        } else if (msgCount < 10) {
+            directions += "\n\n🎯 PACING STAGE - Mid Phase: You're in the middle of this phase. The scene is developing well. Continue exploring and interacting naturally. You MAY begin thinking about the phase's eventual conclusion, but don't rush toward it yet. Let things unfold organically.";
+        } else if (msgCount < 15) {
+            directions += "\n\n🎯 PACING STAGE - Maturing Phase: This phase has been developing nicely. If it feels natural and appropriate based on the story so far, you may begin guiding toward the phase's conclusion using the specified transition phrases. But ONLY if it feels right - don't force it.";
+        } else if (msgCount < MAX_MESSAGES_BEFORE_FORCED_CHECK) {
+            directions += "\n\n🎯 PACING STAGE - Ready to Transition: This phase has developed well over many messages. When you feel the time is right, use one of the specified transition phrases to move the story forward to the next phase.";
+        } else {
+            directions += "\n\n🎯 PACING STAGE - Extended Phase: This phase has gone on for quite a while. Please wrap up this scene and use one of the transition phrases to move the story forward.";
+        }
 
         const result = `[Stage Direction: ${directions}]`;
         this.cachedStageDirections.set(phase, result);
@@ -261,7 +317,6 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
             const currentPhase = currentState.currentPhase;
 
             // Increment message counter ONLY for user messages (not bot messages)
-            // This ensures only user messages count toward the 5-message waiting period
             const messagesInPhase = isUserMessage
                 ? currentState.messagesInCurrentPhase + 1
                 : currentState.messagesInCurrentPhase;
@@ -277,8 +332,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
             let newMessageCount = messagesInPhase;
 
             // Check for phase transition
-            // Note: checkPhaseTransition will return false if messagesInPhase < 3
-            // This enforces the 3-user-message waiting period before keyword evaluation begins
+            // Note: checkPhaseTransition will return false if messagesInPhase < MIN_MESSAGES_BEFORE_EVALUATION
             if (this.checkPhaseTransition(content, currentPhase, messagesInPhase)) {
                 const journalEntry = this.generateJournalEntry(currentPhase, allDiscoveries);
                 newJournalEntries = [...newJournalEntries, {
@@ -286,7 +340,7 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                     content: journalEntry
                 }];
                 nextPhase = currentPhase + 1;
-                // Reset counter to 0 when entering new phase - starts 3-user-message waiting period again
+                // Reset counter to 0 when entering new phase
                 newMessageCount = 0;
             }
 
@@ -338,6 +392,34 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
             const currentPhase = PHASES[currentState.currentPhase - 1] || PHASES[0];
             const chatState = this.currentChatState || {furthestPhase: 1};
             const recentDiscoveries = (currentState.discoveries || []).slice(-10).reverse();
+            const msgCount = currentState.messagesInCurrentPhase ?? 0;
+
+            // Determine pacing status for visual feedback
+            let pacingStatus: 'early' | 'building' | 'mid' | 'ready' | 'extended';
+            let pacingColor: string;
+            let pacingLabel: string;
+
+            if (msgCount < 3) {
+                pacingStatus = 'early';
+                pacingColor = '#3498db';
+                pacingLabel = 'EARLY PHASE - Building the scene';
+            } else if (msgCount < 6) {
+                pacingStatus = 'building';
+                pacingColor = '#9b59b6';
+                pacingLabel = 'DEVELOPING - Scene unfolding';
+            } else if (msgCount < 10) {
+                pacingStatus = 'mid';
+                pacingColor = '#f39c12';
+                pacingLabel = 'MID-PHASE - Story progressing';
+            } else if (msgCount < MAX_MESSAGES_BEFORE_FORCED_CHECK) {
+                pacingStatus = 'ready';
+                pacingColor = '#2ecc71';
+                pacingLabel = 'READY - May transition when appropriate';
+            } else {
+                pacingStatus = 'extended';
+                pacingColor = '#e74c3c';
+                pacingLabel = 'EXTENDED - Should wrap up soon';
+            }
 
             return (
                 <div style={{width: '100vw', height: '100vh', padding: '20px', backgroundColor: '#1a1a2e', color: '#eaeaea', fontFamily: 'Georgia, serif', overflowY: 'auto', boxSizing: 'border-box'}}>
@@ -355,101 +437,141 @@ export class Stage extends StageBase<InitStateType, ChatStateType, MessageStateT
                         </div>
                     </div>
 
-                    <div style={{backgroundColor: '#16213e', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #555'}}>
-                        <h3 style={{margin: '0 0 15px 0', fontSize: '18px', color: '#c9a961', borderBottom: '1px solid #555', paddingBottom: '8px'}}>📖 Journey Journal</h3>
-                        {currentState.journalEntries.length === 0 ? (
-                            <p style={{margin: 0, fontSize: '14px', color: '#888', fontStyle: 'italic'}}>Your story begins...</p>
-                        ) : (
-                            <div style={{fontSize: '14px', lineHeight: '1.8'}}>
-                                {currentState.journalEntries.map((entry: JournalEntry, idx: number) => (
-                                    <div key={idx} style={{marginBottom: '10px', color: '#ccc'}}>{entry.content}</div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    {/* IMPROVED PACING INDICATOR */}
+                    <div style={{
+                        backgroundColor: '#0f3460',
+                        padding: '15px',
+                        borderRadius: '8px',
+                        marginBottom: '20px',
+                        border: '1px solid #16537e'
+                    }}>
+                        <h3 style={{margin: '0 0 10px 0', fontSize: '16px', color: '#5dade2', fontFamily: 'monospace'}}>
+                            ⏱️ Phase Pacing Status
+                        </h3>
 
-                    <div style={{backgroundColor: '#0f3460', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #16537e'}}>
-                        <h3 style={{margin: '0 0 10px 0', fontSize: '16px', color: '#5dade2', fontFamily: 'monospace'}}>🔧 DEBUG: Current Phase Objectives</h3>
-                        <div style={{fontSize: '13px', color: '#aed6f1', fontFamily: 'monospace'}}>
-                            <div style={{padding: '10px', backgroundColor: '#1a4971', borderRadius: '6px', border: '2px solid #5dade2'}}>
-                                <div style={{fontWeight: 'bold', marginBottom: '8px', color: '#5dade2', fontSize: '14px'}}>▶ {currentPhase.name}</div>
-                                {currentPhase.objectives.map((objective: string, objIdx: number) => (
-                                    <div key={objIdx} style={{marginBottom: '4px', paddingLeft: '10px', display: 'flex', alignItems: 'center'}}>
-                                        <span style={{marginRight: '8px', fontSize: '16px', color: '#f39c12'}}>○</span>
-                                        <span style={{color: '#ecf0f1'}}>{objective}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Enhanced visual feedback for 3-message waiting period */}
                         <div style={{
-                            marginTop: '12px',
-                            fontSize: '12px',
-                            color: '#85c1e9',
-                            fontFamily: 'monospace',
-                            padding: '10px',
-                            backgroundColor: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '#3d2a0a' : '#0a2540',
+                            padding: '12px',
+                            backgroundColor: msgCount < MIN_MESSAGES_BEFORE_EVALUATION ? '#3d2a0a' : '#0a2540',
                             borderRadius: '4px',
-                            border: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '2px solid #f39c12' : '2px solid #2ecc71'
+                            border: `2px solid ${pacingColor}`
                         }}>
                             <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px'}}>
                                 <strong>📊 User Messages in Phase:</strong>
                                 <span style={{
-                                    fontSize: '16px',
+                                    fontSize: '18px',
                                     fontWeight: 'bold',
-                                    color: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '#f39c12' : '#2ecc71'
+                                    color: pacingColor
                                 }}>
-                                    {currentState.messagesInCurrentPhase ?? 0}/3
+                                    {msgCount}
                                 </span>
                             </div>
 
-                            {/* Progress bar */}
+                            {/* Progress bar showing position in phase lifecycle */}
                             <div style={{
                                 width: '100%',
-                                height: '8px',
+                                height: '10px',
                                 backgroundColor: '#1a1a2e',
                                 borderRadius: '4px',
                                 overflow: 'hidden',
-                                marginBottom: '8px'
+                                marginBottom: '10px',
+                                position: 'relative'
                             }}>
+                                {/* Minimum threshold marker */}
                                 <div style={{
-                                    width: `${Math.min(((currentState.messagesInCurrentPhase ?? 0) / 3) * 100, 100)}%`,
+                                    position: 'absolute',
+                                    left: `${(MIN_MESSAGES_BEFORE_EVALUATION / MAX_MESSAGES_BEFORE_FORCED_CHECK) * 100}%`,
+                                    top: 0,
+                                    bottom: 0,
+                                    width: '2px',
+                                    backgroundColor: '#2ecc71',
+                                    zIndex: 2
+                                }} />
+
+                                {/* Progress fill */}
+                                <div style={{
+                                    width: `${Math.min((msgCount / MAX_MESSAGES_BEFORE_FORCED_CHECK) * 100, 100)}%`,
                                     height: '100%',
-                                    backgroundColor: (currentState.messagesInCurrentPhase ?? 0) < 3 ? '#f39c12' : '#2ecc71',
-                                    transition: 'width 0.3s ease'
+                                    backgroundColor: pacingColor,
+                                    transition: 'width 0.3s ease, background-color 0.3s ease'
                                 }} />
                             </div>
 
-                            {(currentState.messagesInCurrentPhase ?? 0) < 3 ? (
+                            <div style={{color: pacingColor, fontSize: '12px', fontWeight: 'bold', marginBottom: '8px'}}>
+                                <span style={{fontSize: '14px', marginRight: '4px'}}>
+                                    {msgCount < MIN_MESSAGES_BEFORE_EVALUATION ? '⏳' :
+                                     msgCount < COMFORTABLE_PHASE_LENGTH ? '🎭' :
+                                     msgCount < MAX_MESSAGES_BEFORE_FORCED_CHECK ? '✓' : '⚠️'}
+                                </span>
+                                {pacingLabel}
+                            </div>
+
+                            {msgCount < MIN_MESSAGES_BEFORE_EVALUATION ? (
                                 <div style={{color: '#f39c12', fontSize: '11px'}}>
-                                    <span style={{fontSize: '14px', marginRight: '4px'}}>⏳</span>
-                                    <strong>WAITING PERIOD:</strong> {3 - (currentState.messagesInCurrentPhase ?? 0)} more user message{3 - (currentState.messagesInCurrentPhase ?? 0) === 1 ? '' : 's'} until keyword evaluation begins
+                                    <strong>MINIMUM PHASE DEVELOPMENT:</strong> {MIN_MESSAGES_BEFORE_EVALUATION - msgCount} more user message{MIN_MESSAGES_BEFORE_EVALUATION - msgCount === 1 ? '' : 's'} until transition keywords can be evaluated.
                                     <div style={{marginTop: '4px', fontStyle: 'italic', opacity: 0.8}}>
-                                        (Only user messages count - bot responses do not increment counter)
+                                        The bot should focus on developing this phase naturally, not rushing to the conclusion.
+                                    </div>
+                                </div>
+                            ) : msgCount < COMFORTABLE_PHASE_LENGTH ? (
+                                <div style={{color: '#9b59b6', fontSize: '11px'}}>
+                                    <strong>ACTIVE DEVELOPMENT:</strong> Phase can now progress when the bot uses a transition phrase, but there's still plenty of room for the scene to develop.
+                                    <div style={{marginTop: '4px', fontStyle: 'italic', opacity: 0.8}}>
+                                        Comfortable phase length: ~{COMFORTABLE_PHASE_LENGTH} messages
+                                    </div>
+                                </div>
+                            ) : msgCount < MAX_MESSAGES_BEFORE_FORCED_CHECK ? (
+                                <div style={{color: '#2ecc71', fontSize: '11px'}}>
+                                    <strong>READY TO TRANSITION:</strong> Phase has developed well. Bot may use a transition phrase when narratively appropriate.
+                                    <div style={{marginTop: '4px', fontStyle: 'italic', opacity: 0.8}}>
+                                        Safety valve activates at {MAX_MESSAGES_BEFORE_FORCED_CHECK} messages
                                     </div>
                                 </div>
                             ) : (
-                                <div style={{color: '#2ecc71', fontSize: '11px'}}>
-                                    <span style={{fontSize: '14px', marginRight: '4px'}}>✓</span>
-                                    <strong>KEYWORD EVALUATION ACTIVE</strong>
+                                <div style={{color: '#e74c3c', fontSize: '11px'}}>
+                                    <strong>EXTENDED PHASE:</strong> This phase has gone on longer than expected. Bot should wrap up and transition.
                                     <div style={{marginTop: '4px', fontStyle: 'italic', opacity: 0.8}}>
-                                        Phase can now progress when keywords are detected
+                                        Safety valve is active - allowing looser transition criteria
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {currentPhase.keywords.length > 0 && (
-                            <div style={{marginTop: '8px', fontSize: '12px', color: '#85c1e9', fontFamily: 'monospace', padding: '8px', backgroundColor: '#0a2540', borderRadius: '4px'}}>
-                                <strong>⚡ Transition Keywords:</strong> {currentPhase.keywords.join(', ')}
+                        {currentPhase.transitionKeywords.length > 0 && (
+                            <div style={{marginTop: '12px', fontSize: '11px', color: '#85c1e9', fontFamily: 'monospace', padding: '10px', backgroundColor: '#0a2540', borderRadius: '4px'}}>
+                                <strong>⚡ Required Transition Phrases:</strong>
+                                <div style={{marginTop: '6px', paddingLeft: '10px'}}>
+                                    {currentPhase.transitionKeywords.map((keyword, idx) => (
+                                        <div key={idx} style={{marginTop: '4px'}}>
+                                            • "{keyword}"
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{marginTop: '8px', fontStyle: 'italic', opacity: 0.7}}>
+                                    Bot must use one of these exact phrases to transition to the next phase
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{backgroundColor: '#16213e', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #555'}}>
+                        <h3 style={{margin: '0 0 15px 0', fontSize: '18px', color: '#c9a961', borderBottom: '1px solid #555', paddingBottom: '8px'}}>📖 Journey Journal</h3>
+                        {currentState.journalEntries.length === 0 ? (
+                            <p style={{margin: 0, color: '#888', fontStyle: 'italic'}}>Your journey begins...</p>
+                        ) : (
+                            <div style={{fontSize: '14px'}}>
+                                {currentState.journalEntries.map((entry, idx) => (
+                                    <div key={idx} style={{marginBottom: '10px', paddingBottom: '10px', borderBottom: idx < currentState.journalEntries.length - 1 ? '1px solid #333' : 'none'}}>
+                                        <div style={{color: '#c9a961', marginBottom: '3px'}}>Phase {entry.phase}</div>
+                                        <div style={{color: '#ccc'}}>{entry.content}</div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>
 
                     {recentDiscoveries.length > 0 && (
                         <div style={{backgroundColor: '#0f3460', padding: '15px', borderRadius: '8px', border: '1px solid #16537e'}}>
-                            <h3 style={{margin: '0 0 10px 0', fontSize: '16px', color: '#5dade2', fontFamily: 'monospace'}}>🔍 DEBUG: Recent Discoveries</h3>
+                            <h3 style={{margin: '0 0 10px 0', fontSize: '16px', color: '#5dade2', fontFamily: 'monospace'}}>🔍 Recent Discoveries</h3>
                             <div style={{fontSize: '12px', color: '#aed6f1', fontFamily: 'monospace'}}>
                                 {recentDiscoveries.map((discovery: Discovery, idx: number) => (
                                     <div key={idx} style={{marginBottom: '8px', padding: '5px', backgroundColor: '#1a4971', borderRadius: '4px'}}>
